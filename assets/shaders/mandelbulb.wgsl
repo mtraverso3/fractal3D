@@ -21,6 +21,7 @@ struct MandelbulbMaterial {
     color_offset: f32, // Shifts the colors
     ao_strength: f32,  // Ambient occlusion strength
     rim_strength: f32, // Rim lighting strength
+    fog_density: f32,  // Fog density
     julia: vec4<f32>, // xyz are the constant, w is enabled flag
 };
 
@@ -225,7 +226,7 @@ fn render_ray(uv: vec2<f32>) -> vec3<f32> {
             col = (ambient + diffuse_light + specular_light + rim_light) * ao;
 
             // some fog based on distance
-            col = mix(col, vec3<f32>(0.01, 0.01, 0.02), 1.0 - exp(-0.05 * t * t));
+            col = mix(col, vec3<f32>(0.01, 0.01, 0.02), 1.0 - exp(-material.fog_density * t));
 
             break;
         }

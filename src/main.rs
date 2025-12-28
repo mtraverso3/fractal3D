@@ -53,6 +53,7 @@ fn setup(
         color_offset: 0.0,
         ao_strength: 1.0,
         rim_strength: 0.5,
+        fog_density: 0.1,
         julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
     });
 
@@ -99,6 +100,8 @@ struct MandelbulbMaterial {
     ao_strength: f32,
     #[uniform(0)]
     rim_strength: f32,
+    #[uniform(0)]
+    fog_density: f32,
     #[uniform(0)]
     julia: Vec4,
 }
@@ -148,12 +151,19 @@ fn update_material(
     }
 }
 
+/// Handles keyboard input for controlling camera movement and rotation.
+///
+/// # Key Bindings
+/// - W/A/S/D: Move forward/left/backward/right
+/// - Space/Left Shift: Move up/down
+/// - Arrow Keys: Rotate camera (about its own axes)
 fn keyboard_controls(
     mut materials: ResMut<Assets<MandelbulbMaterial>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {
     let speed = 2.0 * time.delta_secs();
+    let rotation_speed = 1.5 * time.delta_secs();
 
     // Calculate movement direction based on input
     let mut move_input = Vec3::ZERO;
@@ -177,11 +187,29 @@ fn keyboard_controls(
         move_input.y = 1.0; // Down
     }
 
-    if move_input != Vec3::ZERO {
-        move_input = move_input.normalize() * speed;
+    // Calculate rotation input from arrow keys
+    let mut yaw = 0.0;
+    let mut pitch = 0.0;
 
-        for (_, mat) in materials.iter_mut() {
-            let rotation = Quat::from_vec4(mat.camera_rotation);
+    if keys.pressed(KeyCode::ArrowLeft) {
+        yaw += rotation_speed; // Turn left
+    }
+    if keys.pressed(KeyCode::ArrowRight) {
+        yaw -= rotation_speed; // Turn right
+    }
+    if keys.pressed(KeyCode::ArrowUp) {
+        pitch -= rotation_speed; // Look up
+    }
+    if keys.pressed(KeyCode::ArrowDown) {
+        pitch += rotation_speed; // Look down
+    }
+
+    for (_, mat) in materials.iter_mut() {
+        let rotation = Quat::from_vec4(mat.camera_rotation);
+
+        // Handle movement
+        if move_input != Vec3::ZERO {
+            let move_input = move_input.normalize() * speed;
             let inv_rotation = rotation.inverse();
 
             // Transform movement direction by inverse rotation
@@ -192,9 +220,20 @@ fn keyboard_controls(
             let movement = forward * move_input.z + right * move_input.x + up * move_input.y;
             mat.camera_position += movement;
         }
+
+        // Handle rotation
+        if yaw != 0.0 || pitch != 0.0 {
+            let delta_yaw = Quat::from_rotation_y(yaw);
+            let delta_pitch = Quat::from_rotation_x(pitch);
+
+            let new_rotation = delta_yaw * delta_pitch * rotation;
+            mat.camera_rotation = Vec4::from(new_rotation.normalize());
+        }
     }
 }
 
+/// Handles mouse input for rotating the camera when the left mouse button is held down.
+/// The rotation is applied about the origin
 fn mouse_controls(
     mut materials: ResMut<Assets<MandelbulbMaterial>>,
     buttons: Res<ButtonInput<MouseButton>>,
@@ -294,7 +333,7 @@ fn ui_controls(
 
                 ui.add_enabled(
                     !settings.animate_power,
-                    egui::Slider::new(&mut mat.power, 1.0..=16.0).text("Power"),
+                    egui::Slider::new(&mut mat.power, -2.0..=16.0).text("Power"),
                 );
 
                 let mut iters = mat.mandel_iters as f32;
@@ -407,6 +446,11 @@ fn ui_controls(
                 ui.add(
                     egui::Slider::new(&mut mat.rim_strength, 0.0..=2.0)
                         .text("Rim Lighting")
+                        .step_by(0.01),
+                );
+                ui.add(
+                    egui::Slider::new(&mut mat.fog_density, 0.0..=1.0)
+                        .text("Fog Density")
                         .step_by(0.01),
                 );
 
