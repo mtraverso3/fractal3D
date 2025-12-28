@@ -128,6 +128,49 @@ fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
     let dist = 0.5 * log(r) * r / dr;
     return vec2<f32>(dist, trap);
 }
+fn sphere_fold(z: vec3<f32>) -> vec3<f32> {
+    let min_r = 0.5;
+    let fixed_r = 1.0;
+    let r2 = dot(z, z);
+    if (r2 < min_r) {
+        return z * (fixed_r / min_r);
+    } else if (r2 < fixed_r) {
+        return z * (fixed_r / r2);
+    }
+    return z;
+}
+
+fn box_fold(z: vec3<f32>) -> vec3<f32> {
+    let folding_limit = 1.0;
+    return clamp(z, vec3<f32>(-folding_limit), vec3<f32>(folding_limit)) * 2.0 - z;
+}
+fn sd_mandelbox(p: vec3<f32>) -> vec2<f32> {
+    var z = p;
+    var dr = 1.0;
+
+    let scale = material.power;
+
+    var offset = p;
+    if (material.julia.w > 0.5) {
+        offset = material.julia.xyz;
+    }
+
+    var trap = 1e20;
+
+    for (var i = 0u; i < material.mandel_iters; i++) {
+        z = box_fold(z);
+        z = sphere_fold(z);
+
+        z = z * scale + offset;
+        dr = dr * abs(scale) + 1.0;
+
+        // Trap for coloring
+        trap = min(trap, length(z));
+    }
+
+    let r = length(z);
+    return vec2<f32>(r / abs(dr), trap);
+}
 
 // Rotate vector p by quaternion q
 fn rotate_vector(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
@@ -144,6 +187,7 @@ fn rotate_vector_inverse(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
 // Wrapper to handle rotation and return full data (not anymore, todo:remove)
 fn map_full(p: vec3<f32>) -> vec2<f32> {
     return sd_mandelbulb(p);
+//    return sd_mandelbox(p);
 }
 
 // Wrapper that just returns distance (cheaper for normals)
