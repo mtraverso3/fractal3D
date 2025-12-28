@@ -4,7 +4,15 @@ struct VertexOutput {
 };
 
 struct MandelbulbMaterial {
-    time: f32,
+    resolution: vec2<f32>, // 8 bytes
+    time: f32,             // 4 bytes
+    power: f32,            // 4 bytes
+    speed: f32,            // 4 bytes
+    ray_steps: u32,        // 4 bytes
+    mandel_iters: u32,     // 4 bytes
+    max_dist: f32,         // 4 bytes
+    hit_threshold: f32,    // 4 bytes
+    camera_zoom: f32,     // 4 bytes
 };
 
 @group(2) @binding(0)
@@ -29,7 +37,7 @@ fn sd_mandelbulb(p: vec3<f32>) -> f32 {
     let power = 8.0;
 
     // iterating z = z^8 + c
-    for (var i = 0; i < 15; i++) {
+    for (var i = 0u; i < material.mandel_iters; i++) {
         r = length(z);
         if (r > 2.0) { break; }
 
@@ -38,12 +46,12 @@ fn sd_mandelbulb(p: vec3<f32>) -> f32 {
         var phi = atan2(z.y, z.x);
 
         // calculate the derivative, needed at end for distance estimation
-        dr = pow(r, power - 1.0) * power * dr + 1.0;
+        dr = pow(r, material.power - 1.0) * material.power * dr + 1.0;
 
         // scale and rotate the point
-        let zr = pow(r, power);
-        theta = theta * power;
-        phi = phi * power;
+        let zr = pow(r, material.power);
+        theta = theta * material.power;
+        phi = phi * material.power;
 
         // convert back to cartesian
         z = zr * vec3<f32>(
@@ -62,14 +70,14 @@ fn sd_mandelbulb(p: vec3<f32>) -> f32 {
 
 // calculate distance to surface at point p after applying any transformations
 fn map(p: vec3<f32>) -> f32 {
-    let rotated_p = rotate_y(p, material.time * 0.5); // rotation transformation over time
+    let rotated_p = rotate_y(p, material.time * material.speed); // rotation transformation over time
     return sd_mandelbulb(rotated_p);
 }
 
 // Calculate the normal at point p using "central differences"
 // see: https://iquilezles.org/articles/normalsSDF/
 fn calculate_normal(p: vec3<f32>) -> vec3<f32> {
-    let e = 0.001; // small epsilon for numerical derivative
+    let e = material.hit_threshold * 0.5;
     return normalize(vec3<f32>(
         map(p + vec3<f32>(e, 0.0, 0.0)) - map(p - vec3<f32>(e, 0.0, 0.0)),
         map(p + vec3<f32>(0.0, e, 0.0)) - map(p - vec3<f32>(0.0, e, 0.0)),
@@ -85,14 +93,16 @@ fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
     var t = 0.0; // distance along the ray
     var col = vec3<f32>(0.05, 0.05, 0.08); // Background color
 
+    let steps = material.ray_steps;
+
     // ray march loop
-    for (var i = 0; i < 100; i++) {
+    for (var i = 0u; i < steps; i++) {
         // current position along the ray
         let p = ro + rd * t;
         let d = map(p);
 
         // hit condition, close enough to the surface
-        if (d < 0.002) {
+        if (d < material.hit_threshold) {
             let normal = calculate_normal(p);
 
             // Lighting
@@ -108,7 +118,7 @@ fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
         t += d; // march the ray
 
         // ray exceeded max distance
-        if (t > 20.0) { break; }
+        if (t > material.max_dist) { break; }
     }
 
     return col;

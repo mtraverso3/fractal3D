@@ -10,7 +10,7 @@ fn main() {
             Material2dPlugin::<MandelbulbMaterial>::default(),
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, update_material_time)
+        .add_systems(Update, update_material)
         .run();
 }
 
@@ -18,15 +18,27 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<MandelbulbMaterial>>,
+    window: Query<&Window>,
 ) {
-    commands.spawn((
-        Camera2d::default(),
-        // Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+    let win = window.single().unwrap();
+
+    commands.spawn((Camera2d::default(),));
 
     commands.spawn((
         Mesh2d(meshes.add(Rectangle::default())),
-        MeshMaterial2d(materials.add(MandelbulbMaterial {time: 0.0})),
+        MeshMaterial2d(materials.add(MandelbulbMaterial {
+            resolution: Vec2::new(win.width(), win.height()),
+
+            time: 0.0,
+            power: 8.0,
+            speed: 0.2,
+
+            ray_steps: 100,   // How far to march (higher = less artifacts at edges)
+            mandel_iters: 50, // Fractal detail (higher = more spikes)
+            max_dist: 50.0,   // Render distance clipping
+            hit_threshold: 0.002, // Precision (lower = sharper but slower)
+            camera_zoom: 1.0,
+        })),
         Transform::default().with_scale(Vec3::splat(1280.0)),
     ));
 }
@@ -34,7 +46,23 @@ fn setup(
 #[derive(Asset, TypePath, AsBindGroup, Clone)]
 struct MandelbulbMaterial {
     #[uniform(0)]
-    time: f32,
+    resolution: Vec2, // 8 bytes (Aligned)
+    #[uniform(0)]
+    time: f32, // 4 bytes
+    #[uniform(0)]
+    power: f32, // 4 bytes
+    #[uniform(0)]
+    speed: f32, // 4 bytes
+    #[uniform(0)]
+    ray_steps: u32, // 4 bytes (Integers are fine in Uniforms)
+    #[uniform(0)]
+    mandel_iters: u32, // 4 bytes
+    #[uniform(0)]
+    max_dist: f32, // 4 bytes
+    #[uniform(0)]
+    hit_threshold: f32, // 4 bytes
+    #[uniform(0)]
+    camera_zoom: f32, // 4 bytes
 }
 
 impl Material2d for MandelbulbMaterial {
@@ -44,8 +72,17 @@ impl Material2d for MandelbulbMaterial {
 }
 
 // System to update the time uniform every frame
-fn update_material_time(time: Res<Time>, mut materials: ResMut<Assets<MandelbulbMaterial>>) {
+fn update_material(
+    time: Res<Time>,
+    window: Query<&Window>,
+    mut materials: ResMut<Assets<MandelbulbMaterial>>,
+) {
+    let win = window.single().unwrap();
     for (_, material) in materials.iter_mut() {
         material.time = time.elapsed_secs_f64() as f32;
+        material.resolution = Vec2::new(win.width(), win.height());
+
+        // Animate the power parameter over time
+        // material.power = 8.0 + (time.elapsed_secs_f64().sin() as f32);
     }
 }
