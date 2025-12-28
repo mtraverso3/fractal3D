@@ -9,9 +9,9 @@ A simple real-time ray-marched Mandelbulb fractal renderer using Rust and gpu fr
 
 ## Build and run
 
-1. Install Rust: `rustup install stable`
+1. Install rustup (https://rustup.rs/), then: `rustup install stable`
 2. Build and run (development): `cargo run`
-3. Build and run (optimized): `cargo run --release`
+3. Build and run (optimized, recommended): `cargo run --release`
 
 ## Notable files
 - `src/main.rs` — shader setup/bootstrap code
