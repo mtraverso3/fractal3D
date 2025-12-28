@@ -5,9 +5,7 @@ struct VertexOutput {
 
 struct MandelbulbMaterial {
     resolution: vec2<f32>, // 8 bytes
-    time: f32,             // 4 bytes
     power: f32,            // 4 bytes
-    speed: f32,            // 4 bytes
     ray_steps: u32,        // 4 bytes
     mandel_iters: u32,     // 4 bytes
     max_dist: f32,         // 4 bytes
@@ -19,6 +17,7 @@ struct MandelbulbMaterial {
     glow_intensity: f32, // Intensity of the background glow
     color_scale: f32,  // Stretches the gradient
     color_offset: f32, // Shifts the colors
+    rotation_angle: f32,
 };
 
 @group(2) @binding(0)
@@ -123,8 +122,8 @@ fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
 
 // Wrapper to handle rotation and return full data
 fn map_full(p: vec3<f32>) -> vec2<f32> {
-    let rotated_p = rotate_y(p, material.time * material.speed);
-    let rotated_p2 = rotate_x(rotated_p, material.time * material.speed);
+    let rotated_p = rotate_y(p, material.rotation_angle);
+    let rotated_p2 = rotate_x(rotated_p, material.rotation_angle);
     return sd_mandelbulb(rotated_p2);
 }
 
@@ -144,7 +143,7 @@ fn calculate_normal(p: vec3<f32>) -> vec3<f32> {
     ));
 }
 
-fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
+fn render_ray(uv: vec2<f32>) -> vec3<f32> {
     // Camera Setup
     let ro = vec3<f32>(0.0, 0.0, -material.camera_zoom); // ray origin
     let rd = normalize(vec3<f32>(uv, 1.5)); // ray direction (focal length 1.5)
@@ -239,7 +238,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // remap to [-1, 1]
         let sub_uv = (sub_uv_raw * 2.0) - 1.0;
 
-        total_color += render_ray(sub_uv, material.time);
+        total_color += render_ray(sub_uv);
     }
 
     // average the samples

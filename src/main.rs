@@ -30,9 +30,7 @@ fn setup(
 
     let material_handle = materials.add(MandelbulbMaterial {
         resolution: Vec2::new(win.width(), win.height()),
-        time: 0.0,
         power: 8.0,
-        speed: 0.2,
         ray_steps: 100,
         mandel_iters: 20,
         max_dist: 40.0,
@@ -44,6 +42,7 @@ fn setup(
         glow_intensity: 1.0,
         color_scale: 1.0, // Start with 1.0
         color_offset: 0.0,
+        rotation_angle: 0.0,
     });
 
     commands.spawn((
@@ -58,11 +57,7 @@ struct MandelbulbMaterial {
     #[uniform(0)]
     resolution: Vec2, // 8 bytes (Aligned)
     #[uniform(0)]
-    time: f32, // 4 bytes
-    #[uniform(0)]
     power: f32, // 4 bytes
-    #[uniform(0)]
-    speed: f32, // 4 bytes
     #[uniform(0)]
     ray_steps: u32, // 4 bytes (Integers are fine in Uniforms)
     #[uniform(0)]
@@ -85,6 +80,8 @@ struct MandelbulbMaterial {
     color_scale: f32,
     #[uniform(0)]
     color_offset: f32,
+    #[uniform(0)]
+    rotation_angle: f32,
 }
 
 impl Material2d for MandelbulbMaterial {
@@ -102,7 +99,6 @@ fn update_material(
 ) {
     let win = window.single().unwrap();
     for (_, material) in materials.iter_mut() {
-        material.time = time.elapsed_secs_f64() as f32;
         material.resolution = Vec2::new(win.width(), win.height());
 
         // Animate the power parameter over time, goes 1->16->1 and loops
@@ -115,6 +111,9 @@ fn update_material(
             material.power = 16.0_f32.powf(t);
         }
 
+        material.rotation_angle += settings.rotation_speed * time.delta_secs();
+        material.rotation_angle = material.rotation_angle % 6.2831853;
+
         if settings.animate_zoom {
             material.camera_zoom =
                 2.75 + ((time.elapsed_secs_f64() * settings.zoom_speed as f64).sin() as f32) * 0.25;
@@ -124,6 +123,7 @@ fn update_material(
 
 #[derive(Resource)]
 struct SimSettings {
+    rotation_speed: f32,
     animate_zoom: bool,
     zoom_speed: f32,
     animate_power: bool,
@@ -133,6 +133,7 @@ struct SimSettings {
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
+            rotation_speed: 0.2,
             animate_zoom: false,
             zoom_speed: 1.0,
             animate_power: false,
@@ -197,7 +198,7 @@ fn ui_controls(
                     egui::Slider::new(&mut mat.camera_zoom, 0.1..=10.0).text("Zoom"),
                 );
 
-                ui.add(egui::Slider::new(&mut mat.speed, 0.0..=1.0).text("Rotation Speed"));
+                ui.add(egui::Slider::new(&mut settings.rotation_speed, 0.0..=1.0).text("Rotation Speed"));
 
                 // ANIMATION SETTINGS
                 ui.separator();
