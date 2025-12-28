@@ -17,7 +17,7 @@ struct MandelbulbMaterial {
     glow_intensity: f32, // Intensity of the background glow
     color_scale: f32,  // Stretches the gradient
     color_offset: f32, // Shifts the colors
-    rotation_angle: f32,
+    rotation: vec4<f32>, // Quaternion rotation (x, y, z, w)
 };
 
 @group(2) @binding(0)
@@ -120,11 +120,15 @@ fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
     return vec2<f32>(dist, trap);
 }
 
+// Rotate vector p by quaternion q
+fn rotate_vector(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
+    return p + 2.0 * cross(q.xyz, cross(q.xyz, p) + q.w * p);
+}
+
 // Wrapper to handle rotation and return full data
 fn map_full(p: vec3<f32>) -> vec2<f32> {
-    let rotated_p = rotate_y(p, material.rotation_angle);
-    let rotated_p2 = rotate_x(rotated_p, material.rotation_angle);
-    return sd_mandelbulb(rotated_p2);
+    let rotated_p = rotate_vector(p, material.rotation);
+    return sd_mandelbulb(rotated_p);
 }
 
 // Wrapper that just returns distance (cheaper for normals)

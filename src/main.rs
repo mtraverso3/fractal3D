@@ -1,3 +1,4 @@
+use bevy::input::mouse::MouseMotion;
 use bevy::sprite_render::{Material2d, Material2dPlugin};
 use bevy::{
     prelude::*, reflect::TypePath, render::render_resource::AsBindGroup, shader::ShaderRef,
@@ -13,7 +14,7 @@ fn main() {
         ))
         .init_resource::<SimSettings>()
         .add_systems(Startup, setup)
-        .add_systems(Update, update_material)
+        .add_systems(Update, (update_material, mouse_controls))
         .add_systems(EguiPrimaryContextPass, ui_controls)
         .run();
 }
@@ -42,7 +43,7 @@ fn setup(
         glow_intensity: 1.0,
         color_scale: 1.0, // Start with 1.0
         color_offset: 0.0,
-        rotation_angle: 0.0,
+        rotation: Vec4::from(Quat::IDENTITY),
     });
 
     commands.spawn((
@@ -81,7 +82,7 @@ struct MandelbulbMaterial {
     #[uniform(0)]
     color_offset: f32,
     #[uniform(0)]
-    rotation_angle: f32,
+    rotation: Vec4,
 }
 
 impl Material2d for MandelbulbMaterial {
@@ -111,12 +112,55 @@ fn update_material(
             material.power = 16.0_f32.powf(t);
         }
 
-        material.rotation_angle += settings.rotation_speed * time.delta_secs();
-        material.rotation_angle = material.rotation_angle % 6.2831853;
+        // material.rot_x += settings.rotation_speed * time.delta_secs();
+        // material.rot_x = material.rot_x % 6.2831853;
+        //
+        // material.rot_y += settings.rotation_speed * time.delta_secs();
+        // material.rot_y = material.rot_y % 6.2831853;
+
+        if settings.rotation_speed > 0.0 {
+            let delta_rotation_y = Quat::from_rotation_y(settings.rotation_speed * time.delta_secs());
+            let delta_rotation_x = Quat::from_rotation_x(settings.rotation_speed * time.delta_secs());
+
+            let new_rotation = delta_rotation_y * delta_rotation_x * Quat::from_vec4(material.rotation);
+            material.rotation = Vec4::from(new_rotation.normalize());
+        }
+
+
 
         if settings.animate_zoom {
             material.camera_zoom =
                 2.75 + ((time.elapsed_secs_f64() * settings.zoom_speed as f64).sin() as f32) * 0.25;
+        }
+    }
+}
+
+fn mouse_controls(
+    mut materials: ResMut<Assets<MandelbulbMaterial>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut motion_evr: MessageReader<MouseMotion>,
+    mut contexts: EguiContexts,
+) {
+    // If the mouse is over an egui area, don't rotate
+    let ctx = contexts.ctx_mut().unwrap();
+    if ctx.is_pointer_over_area() || ctx.wants_pointer_input() {
+        return;
+    }
+
+    // On left mouse button drag, rotate the fractal
+    if buttons.pressed(MouseButton::Left) {
+        for ev in motion_evr.read() {
+            let sensitivity = 0.005;
+
+            let delta_yaw = Quat::from_rotation_y(ev.delta.x * sensitivity);
+            let delta_pitch = Quat::from_rotation_x(-ev.delta.y * sensitivity);
+
+            for (_, mat) in materials.iter_mut() {
+                // Apply rotation directly to the material's Quat
+                let current_quat = Quat::from_vec4(mat.rotation);
+                let new_quat = current_quat * delta_yaw * delta_pitch ;
+                mat.rotation = Vec4::from(new_quat.normalize());
+            }
         }
     }
 }
@@ -198,7 +242,10 @@ fn ui_controls(
                     egui::Slider::new(&mut mat.camera_zoom, 0.1..=10.0).text("Zoom"),
                 );
 
-                ui.add(egui::Slider::new(&mut settings.rotation_speed, 0.0..=1.0).text("Rotation Speed"));
+                ui.add(
+                    egui::Slider::new(&mut settings.rotation_speed, 0.0..=1.0)
+                        .text("Rotation Speed"),
+                );
 
                 // ANIMATION SETTINGS
                 ui.separator();
