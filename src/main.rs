@@ -87,10 +87,17 @@ fn update_material(
         material.time = time.elapsed_secs_f64() as f32;
         material.resolution = Vec2::new(win.width(), win.height());
 
-        // Animate the power parameter over time
-        // material.power = 8.0 + (time.elapsed_secs_f64().sin() as f32);
+        // Animate the power parameter over time, goes 1->16->1 and loops
+        if settings.animate_power {
+            // normalized 0.0 to 1.0 sine
+            let t = (0.5 + 0.5 * (time.elapsed_secs_f64() * 0.1 * settings.power_speed as f64).sin()) as f32;
+            // Exponentially mapped because the power parameter has an exponential effect on the shape
+            material.power = 16.0_f32.powf(t);
+        }
+
         if settings.animate_zoom {
-            material.camera_zoom = 2.75 + (time.elapsed_secs_f64().sin() as f32) * 0.25;
+            material.camera_zoom =
+                2.75 + ((time.elapsed_secs_f64() * settings.zoom_speed as f64).sin() as f32) * 0.25;
         }
     }
 }
@@ -98,12 +105,18 @@ fn update_material(
 #[derive(Resource)]
 struct SimSettings {
     animate_zoom: bool,
+    zoom_speed: f32,
+    animate_power: bool,
+    power_speed: f32,
 }
 
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
             animate_zoom: false,
+            zoom_speed: 1.0,
+            animate_power: false,
+            power_speed: 1.0,
         }
     }
 }
@@ -120,11 +133,14 @@ fn ui_controls(
         .show(ctx, |ui| {
             ui.heading("Fractal Parameters");
 
-            // We need to iterate over materials (even though there is only one)
             for (_, mat) in materials.iter_mut() {
                 ui.separator();
                 ui.label("Shape");
-                ui.add(egui::Slider::new(&mut mat.power, 1.0..=16.0).text("Power"));
+
+                ui.add_enabled(
+                    !settings.animate_power,
+                    egui::Slider::new(&mut mat.power, 1.0..=16.0).text("Power"),
+                );
 
                 let mut iters = mat.mandel_iters as f32;
                 if ui
@@ -151,12 +167,37 @@ fn ui_controls(
                 ui.add(egui::Slider::new(&mut mat.max_dist, 10.0..=100.0).text("Max Dist"));
 
                 ui.separator();
-                ui.label("Camera & Animation");
-                ui.add(egui::Slider::new(&mut mat.camera_zoom, 0.1..=10.0).text("Zoom"));
-                ui.add(egui::Slider::new(&mut mat.speed, 0.0..=2.0).text("Rotation Speed"));
+                ui.label("Camera");
+
+                ui.add_enabled(
+                    !settings.animate_zoom,
+                    egui::Slider::new(&mut mat.camera_zoom, 0.1..=10.0).text("Zoom"),
+                );
+
+                ui.add(egui::Slider::new(&mut mat.speed, 0.0..=1.0).text("Rotation Speed"));
 
                 ui.separator();
+                ui.heading("Animations");
+
+                ui.checkbox(&mut settings.animate_power, "Auto-Animate Power");
+                if settings.animate_power {
+                    ui.indent("power_speed", |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut settings.power_speed, 0.01..=4.0)
+                                .text("Power Speed"),
+                        );
+                    });
+                }
+
                 ui.checkbox(&mut settings.animate_zoom, "Auto-Animate Zoom");
+                if settings.animate_zoom {
+                    ui.indent("zoom_speed", |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut settings.zoom_speed, 0.1..=5.0)
+                                .text("Zoom Speed"),
+                        );
+                    });
+                }
             }
         });
 }
