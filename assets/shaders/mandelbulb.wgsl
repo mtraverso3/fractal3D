@@ -13,6 +13,12 @@ struct MandelbulbMaterial {
     max_dist: f32,         // 4 bytes
     hit_threshold: f32,    // 4 bytes
     camera_zoom: f32,     // 4 bytes
+    palette_id: u32,   // 0=Standard, 1=Ice, 2=Fire, 3=Neon
+    light_pos_x: f32,  // Move the light left/right
+    light_pos_y: f32,  // Move the light up/down
+    glow_intensity: f32, // Intensity of the background glow
+    color_scale: f32,  // Stretches the gradient
+    color_offset: f32, // Shifts the colors
 };
 
 @group(2) @binding(0)
@@ -43,10 +49,29 @@ fn rotate_x(p: vec3<f32>, angle: f32) -> vec3<f32> {
 // Inigo Quilez's cosine palette function, makes nice smooth color gradients
 // https://iquilezles.org/articles/palettes/
 fn palette(t: f32) -> vec3<f32> {
-    let a = vec3<f32>(0.5, 0.5, 0.5);
-    let b = vec3<f32>(0.5, 0.5, 0.5);
-    let c = vec3<f32>(1.0, 1.0, 1.0);
-    let d = vec3<f32>(0.263, 0.416, 0.557); // Blue/Gold/Pinkish tint
+    var a = vec3<f32>(0.5);
+    var b = vec3<f32>(0.5);
+    var c = vec3<f32>(1.0);
+    var d = vec3<f32>(0.263, 0.416, 0.557);
+
+    // Standard
+    if (material.palette_id == 0u) {
+        d = vec3<f32>(0.263, 0.416, 0.557);
+    }
+    // Fire (Red/Yellow)
+    else if (material.palette_id == 1u) {
+        a = vec3<f32>(0.500, 0.500, 0.000);
+        b = vec3<f32>(0.500, 0.500, 0.000);
+        c = vec3<f32>(0.100, 0.500, 0.000);
+        d = vec3<f32>(0.000, 0.000, 0.000);
+    }
+    // Neon (Purple/Green)
+    else if (material.palette_id == 2u) {
+        a = vec3<f32>(0.5, 0.5, 0.5);
+        b = vec3<f32>(0.5, 0.5, 0.5);
+        c = vec3<f32>(2.0, 1.0, 0.0);
+        d = vec3<f32>(0.5, 0.2, 0.25);
+    }
 
     return a + b * cos(6.28318 * (c * t + d));
 }
@@ -127,7 +152,7 @@ fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
     var t = 0.0; // distance along the ray
 
     // background color, simple gradient with halo effect
-    let bg = exp(uv.y - 2.0) * vec3<f32>(0.2, 0.4, 0.8);
+    let bg = exp(uv.y - 2.0) * vec3<f32>(0.2, 0.4, 0.8) * material.glow_intensity;
     let halo = clamp(dot(normalize(vec3<f32>(-ro.x, -ro.y, -ro.z)), rd), 0.0, 1.0);
     var col = bg + vec3<f32>(0.02, 0.02, 0.08) * pow(halo, 17.0);
 
@@ -145,12 +170,12 @@ fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
             let normal = calculate_normal(p);
             let trap = data.y; // The orbit trap value
 
-            // base color from palette, mixed by orbit trap and number of steps taken
-            let color_variation = trap + (f32(i) / f32(steps)) * 0.5;
-            let albedo = palette(color_variation * 2);
+            let raw_val = trap + (f32(i) / f32(steps)); // combine orbit trap and steps for more variation
+            let color_variation = (raw_val * material.color_scale) + material.color_offset;
+            let albedo = palette(color_variation);
 
             // lighting Setup
-            let light_pos = vec3<f32>(2.0, 4.0, -3.0);
+            let light_pos = vec3<f32>(material.light_pos_x, material.light_pos_y, -3.0);
             let light_dir = normalize(light_pos - p);
             let view_dir = normalize(ro - p);
 
