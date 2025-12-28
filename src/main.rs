@@ -38,22 +38,22 @@ fn setup(
     let material_handle = materials.add(MandelbulbMaterial {
         resolution: Vec2::new(win.width(), win.height()),
         power: 8.0,
-        ray_steps: 100,
-        mandel_iters: 20,
-        max_dist: 40.0,
-        hit_threshold: 0.002,
+        ray_steps: 220,
+        mandel_iters: 10,
+        max_dist: 20.0,
+        hit_threshold: 0.0025,
         camera_zoom: 2.5,
         camera_position: Vec3::ZERO,
         camera_rotation: Vec4::from(Quat::IDENTITY),
         palette_id: 0,
-        light_pos_x: 2.0,
-        light_pos_y: 4.0,
+        light_pos_x: 8.0,
+        light_pos_y: 10.0,
         background_glow_intensity: 0.0,
-        color_scale: 1.0, // Start with 1.0
-        color_offset: 0.0,
-        ao_strength: 1.0,
-        rim_strength: 0.5,
-        fog_density: 0.1,
+        color_scale: 0.095, // Start with 1.0
+        color_offset: 0.05,
+        ao_strength: 1.2,
+        rim_strength: 0.1,
+        fog_density: 0.05,
         julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
     });
 
@@ -305,7 +305,7 @@ struct SimSettings {
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
-            rotation_speed: 0.2,
+            rotation_speed: 0.1,
             animate_zoom: false,
             zoom_speed: 1.0,
             animate_power: false,
