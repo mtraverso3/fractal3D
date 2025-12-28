@@ -1,9 +1,11 @@
 use bevy::input::mouse::MouseMotion;
 use bevy::sprite_render::{Material2d, Material2dPlugin};
+use bevy::winit::{UpdateMode, WinitSettings};
 use bevy::{
     prelude::*, reflect::TypePath, render::render_resource::AsBindGroup, shader::ShaderRef,
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use std::time::Duration;
 
 fn main() {
     App::new()
@@ -13,8 +15,12 @@ fn main() {
             Material2dPlugin::<MandelbulbMaterial>::default(),
         ))
         .init_resource::<SimSettings>()
+        .insert_resource(WinitSettings::desktop_app())
         .add_systems(Startup, setup)
-        .add_systems(Update, (update_material, mouse_controls))
+        .add_systems(
+            Update,
+            (update_material, mouse_controls, manage_rendering_mode),
+        )
         .add_systems(EguiPrimaryContextPass, ui_controls)
         .run();
 }
@@ -158,10 +164,40 @@ fn mouse_controls(
             for (_, mat) in materials.iter_mut() {
                 // Apply rotation directly to the material's Quat
                 let current_quat = Quat::from_vec4(mat.rotation);
-                let new_quat = current_quat * delta_yaw * delta_pitch ;
+                let new_quat = current_quat * delta_yaw * delta_pitch;
                 mat.rotation = Vec4::from(new_quat.normalize());
             }
         }
+    }
+}
+
+fn manage_rendering_mode(
+    mut winit_settings: ResMut<WinitSettings>,
+    sim_settings: Res<SimSettings>,
+) {
+    // Check if anything requires continuous updates
+    let is_animating = sim_settings.animate_zoom
+        || sim_settings.animate_power
+        || sim_settings.rotation_speed > 0.0;
+
+    if is_animating {
+        // If animating, render every frame
+        winit_settings.focused_mode = UpdateMode::Continuous;
+        winit_settings.unfocused_mode = UpdateMode::Continuous;
+    } else {
+        winit_settings.focused_mode = UpdateMode::Reactive {
+            wait: Duration::from_secs_f64(1.0 / 60.0), // if focused, check 60 times per second
+            react_to_device_events: false,
+            react_to_user_events: false,
+            react_to_window_events: false,
+        };
+
+        winit_settings.unfocused_mode = UpdateMode::Reactive {
+            wait: Duration::from_secs(1), // if unfocused, check once per second
+            react_to_device_events: false,
+            react_to_user_events: false,
+            react_to_window_events: false,
+        };
     }
 }
 
