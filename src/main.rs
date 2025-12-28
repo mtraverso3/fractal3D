@@ -46,9 +46,11 @@ fn setup(
         palette_id: 0,
         light_pos_x: 2.0,
         light_pos_y: 4.0,
-        glow_intensity: 1.0,
+        background_glow_intensity: 0.0,
         color_scale: 1.0, // Start with 1.0
         color_offset: 0.0,
+        ao_strength: 1.0,
+        rim_strength: 0.5,
         rotation: Vec4::from(Quat::IDENTITY),
         julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
     });
@@ -83,11 +85,15 @@ struct MandelbulbMaterial {
     #[uniform(0)]
     light_pos_y: f32,
     #[uniform(0)]
-    glow_intensity: f32,
+    background_glow_intensity: f32,
     #[uniform(0)]
     color_scale: f32,
     #[uniform(0)]
     color_offset: f32,
+    #[uniform(0)]
+    ao_strength: f32,
+    #[uniform(0)]
+    rim_strength: f32,
     #[uniform(0)]
     rotation: Vec4,
     #[uniform(0)]
@@ -120,12 +126,6 @@ fn update_material(
             // Exponentially mapped because the power parameter has an exponential effect on the shape
             material.power = 16.0_f32.powf(t);
         }
-
-        // material.rot_x += settings.rotation_speed * time.delta_secs();
-        // material.rot_x = material.rot_x % 6.2831853;
-        //
-        // material.rot_y += settings.rotation_speed * time.delta_secs();
-        // material.rot_y = material.rot_y % 6.2831853;
 
         if settings.rotation_speed > 0.0 {
             let delta_rotation_y =
@@ -316,7 +316,7 @@ fn ui_controls(
                 ui.heading("Visual Style");
 
                 ui.add(
-                    egui::Slider::new(&mut mat.glow_intensity, 0.0..=5.0).text("Glow Intensity"),
+                    egui::Slider::new(&mut mat.background_glow_intensity, 0.0..=5.0).text("Background Brightness"),
                 );
 
                 ui.horizontal(|ui| {
@@ -330,7 +330,6 @@ fn ui_controls(
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut mat.palette_id, 0, "Standard");
-                            ui.selectable_value(&mut mat.palette_id, 1, "Ice");
                             ui.selectable_value(&mut mat.palette_id, 2, "Fire");
                             ui.selectable_value(&mut mat.palette_id, 3, "Neon");
                         });
@@ -351,7 +350,16 @@ fn ui_controls(
                 ui.heading("Lighting");
                 ui.add(egui::Slider::new(&mut mat.light_pos_x, -10.0..=10.0).text("Light X"));
                 ui.add(egui::Slider::new(&mut mat.light_pos_y, -10.0..=10.0).text("Light Y"));
-
+                ui.add(
+                    egui::Slider::new(&mut mat.ao_strength, 0.0..=5.0)
+                        .text("Ambient Occlusion")
+                        .step_by(0.01),
+                );
+                ui.add(
+                    egui::Slider::new(&mut mat.rim_strength, 0.0..=2.0)
+                        .text("Rim Lighting")
+                        .step_by(0.01),
+                );
 
                 // JULIA FOLDING CONTROLS
                 ui.separator();

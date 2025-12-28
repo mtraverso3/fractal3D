@@ -14,9 +14,11 @@ struct MandelbulbMaterial {
     palette_id: u32,   // 0=Standard, 1=Ice, 2=Fire, 3=Neon
     light_pos_x: f32,  // Move the light left/right
     light_pos_y: f32,  // Move the light up/down
-    glow_intensity: f32, // Intensity of the background glow
+    background_glow_intensity: f32, // Intensity of the background glow
     color_scale: f32,  // Stretches the gradient
     color_offset: f32, // Shifts the colors
+    ao_strength: f32,  // Ambient occlusion strength
+    rim_strength: f32, // Rim lighting strength
     rotation: vec4<f32>, // Quaternion rotation (x, y, z, w)
     julia: vec4<f32>, // xyz are the constant, w is enabled flag
 };
@@ -160,7 +162,7 @@ fn render_ray(uv: vec2<f32>) -> vec3<f32> {
     var t = 0.0; // distance along the ray
 
     // background color, simple gradient with halo effect
-    let bg = exp(uv.y - 2.0) * vec3<f32>(0.2, 0.4, 0.8) * material.glow_intensity;
+    let bg = exp(uv.y - 2.0) * vec3<f32>(0.2, 0.4, 0.8) * material.background_glow_intensity;
     let halo = clamp(dot(normalize(vec3<f32>(-ro.x, -ro.y, -ro.z)), rd), 0.0, 1.0);
     var col = bg + vec3<f32>(0.02, 0.02, 0.08) * pow(halo, 17.0);
 
@@ -198,13 +200,13 @@ fn render_ray(uv: vec2<f32>) -> vec3<f32> {
             let rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 4.0);
 
             // fake ambient occlusion based on number of steps taken to hit surface
-            let ao = 1.0 - (f32(i) / f32(steps));
+            let ao = 1.0 - (f32(i) / f32(steps)) * material.ao_strength;
 
             // Combine lighting components
             let ambient = vec3<f32>(0.1) * albedo;
             let diffuse_light = albedo * diff * vec3<f32>(1.0, 0.9, 0.8);
             let specular_light = vec3<f32>(1.0) * spec * 0.8;
-            let rim_light = vec3<f32>(0.0, 0.5, 1.0) * rim * 0.5;
+            let rim_light = vec3<f32>(0.0, 0.5, 1.0) * rim * material.rim_strength;
 
             col = (ambient + diffuse_light + specular_light + rim_light) * ao;
 
