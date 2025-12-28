@@ -10,7 +10,9 @@ struct MandelbulbMaterial {
     mandel_iters: u32,     // 4 bytes
     max_dist: f32,         // 4 bytes
     hit_threshold: f32,    // 4 bytes
-    camera_zoom: f32,     // 4 bytes
+    camera_zoom: f32,      // 4 bytes
+    camera_position: vec3<f32>, // x, y, z
+    camera_rotation: vec4<f32>, // Quaternion rotation (x, y, z, w)
     palette_id: u32,   // 0=Standard, 1=Ice, 2=Fire, 3=Neon
     light_pos_x: f32,  // Move the light left/right
     light_pos_y: f32,  // Move the light up/down
@@ -19,7 +21,6 @@ struct MandelbulbMaterial {
     color_offset: f32, // Shifts the colors
     ao_strength: f32,  // Ambient occlusion strength
     rim_strength: f32, // Rim lighting strength
-    rotation: vec4<f32>, // Quaternion rotation (x, y, z, w)
     julia: vec4<f32>, // xyz are the constant, w is enabled flag
 };
 
@@ -132,10 +133,16 @@ fn rotate_vector(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
     return p + 2.0 * cross(q.xyz, cross(q.xyz, p) + q.w * p);
 }
 
-// Wrapper to handle rotation and return full data
+// Rotate vector p by the inverse/conjugate of quaternion q
+fn rotate_vector_inverse(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
+    // Conjugate of quaternion, negate xyz, keep w
+    let q_conj = vec4<f32>(-q.xyz, q.w);
+    return rotate_vector(p, q_conj);
+}
+
+// Wrapper to handle rotation and return full data (not anymore, todo:remove)
 fn map_full(p: vec3<f32>) -> vec2<f32> {
-    let rotated_p = rotate_vector(p, material.rotation);
-    return sd_mandelbulb(rotated_p);
+    return sd_mandelbulb(p);
 }
 
 // Wrapper that just returns distance (cheaper for normals)
@@ -156,8 +163,15 @@ fn calculate_normal(p: vec3<f32>) -> vec3<f32> {
 
 fn render_ray(uv: vec2<f32>) -> vec3<f32> {
     // Camera Setup
-    let ro = vec3<f32>(0.0, 0.0, -material.camera_zoom); // ray origin
-    let rd = normalize(vec3<f32>(uv, 1.5)); // ray direction (focal length 1.5)
+    let local_offset = vec3<f32>(0.0, 0.0, -material.camera_zoom);
+
+    // rotate camera offset by the rotation quaternion
+    let rotated_offset = rotate_vector_inverse(local_offset, material.camera_rotation);
+    let ro = material.camera_position + rotated_offset; // ray origin in world space
+
+    // ray direction in camera space, then rotate to world space
+    let local_rd = normalize(vec3<f32>(uv, 1.5)); // ray direction (focal length 1.5)
+    let rd = rotate_vector_inverse(local_rd, material.camera_rotation);
 
     var t = 0.0; // distance along the ray
 

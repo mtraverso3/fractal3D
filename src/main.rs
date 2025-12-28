@@ -19,7 +19,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (update_material, mouse_controls, manage_rendering_mode),
+            (update_material, mouse_controls, keyboard_controls, manage_rendering_mode),
         )
         .add_systems(EguiPrimaryContextPass, ui_controls)
         .run();
@@ -43,6 +43,8 @@ fn setup(
         max_dist: 40.0,
         hit_threshold: 0.002,
         camera_zoom: 2.5,
+        camera_position: Vec3::ZERO,
+        camera_rotation: Vec4::from(Quat::IDENTITY),
         palette_id: 0,
         light_pos_x: 2.0,
         light_pos_y: 4.0,
@@ -51,7 +53,6 @@ fn setup(
         color_offset: 0.0,
         ao_strength: 1.0,
         rim_strength: 0.5,
-        rotation: Vec4::from(Quat::IDENTITY),
         julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
     });
 
@@ -79,6 +80,10 @@ struct MandelbulbMaterial {
     #[uniform(0)]
     camera_zoom: f32, // 4 bytes
     #[uniform(0)]
+    camera_position: Vec3,
+    #[uniform(0)]
+    camera_rotation: Vec4,
+    #[uniform(0)]
     palette_id: u32,
     #[uniform(0)]
     light_pos_x: f32,
@@ -94,8 +99,6 @@ struct MandelbulbMaterial {
     ao_strength: f32,
     #[uniform(0)]
     rim_strength: f32,
-    #[uniform(0)]
-    rotation: Vec4,
     #[uniform(0)]
     julia: Vec4,
 }
@@ -134,13 +137,60 @@ fn update_material(
                 Quat::from_rotation_x(settings.rotation_speed * time.delta_secs());
 
             let new_rotation =
-                delta_rotation_y * delta_rotation_x * Quat::from_vec4(material.rotation);
-            material.rotation = Vec4::from(new_rotation.normalize());
+                delta_rotation_y * delta_rotation_x * Quat::from_vec4(material.camera_rotation);
+            material.camera_rotation = Vec4::from(new_rotation.normalize());
         }
 
         if settings.animate_zoom {
             material.camera_zoom =
                 2.75 + ((time.elapsed_secs_f64() * settings.zoom_speed as f64).sin() as f32) * 0.25;
+        }
+    }
+}
+
+fn keyboard_controls(
+    mut materials: ResMut<Assets<MandelbulbMaterial>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+) {
+    let speed = 2.0 * time.delta_secs();
+
+    // Calculate movement direction based on input
+    let mut move_input = Vec3::ZERO;
+
+    if keys.pressed(KeyCode::KeyW) {
+        move_input.z += 1.0; // Forward
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        move_input.z -= 1.0; // Backward
+    }
+    if keys.pressed(KeyCode::KeyA) {
+        move_input.x -= 1.0; // Left
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        move_input.x += 1.0; // Right
+    }
+    if keys.pressed(KeyCode::Space) {
+        move_input.y += -1.0; // Up
+    }
+    if keys.pressed(KeyCode::ShiftLeft) {
+        move_input.y = 1.0; // Down
+    }
+
+    if move_input != Vec3::ZERO {
+        move_input = move_input.normalize() * speed;
+
+        for (_, mat) in materials.iter_mut() {
+            let rotation = Quat::from_vec4(mat.camera_rotation);
+            let inv_rotation = rotation.inverse();
+
+            // Transform movement direction by inverse rotation
+            let forward = inv_rotation.mul_vec3(Vec3::new(0.0, 0.0, 1.0));
+            let right = inv_rotation.mul_vec3(Vec3::new(1.0, 0.0, 0.0));
+            let up = inv_rotation.mul_vec3(Vec3::new(0.0, 1.0, 0.0));
+
+            let movement = forward * move_input.z + right * move_input.x + up * move_input.y;
+            mat.camera_position += movement;
         }
     }
 }
@@ -162,14 +212,13 @@ fn mouse_controls(
         for ev in motion_evr.read() {
             let sensitivity = 0.005;
 
-            let delta_yaw = Quat::from_rotation_y(ev.delta.x * sensitivity);
-            let delta_pitch = Quat::from_rotation_x(-ev.delta.y * sensitivity);
-
             for (_, mat) in materials.iter_mut() {
-                // Apply rotation directly to the material's Quat
-                let current_quat = Quat::from_vec4(mat.rotation);
-                let new_quat = current_quat * delta_yaw * delta_pitch;
-                mat.rotation = Vec4::from(new_quat.normalize());
+                let current_quat = Quat::from_vec4(mat.camera_rotation);
+
+                let delta_yaw = Quat::from_rotation_y(-ev.delta.x * sensitivity);
+                let delta_pitch = Quat::from_rotation_x(ev.delta.y * sensitivity);
+                let new_quat = delta_yaw *  delta_pitch * current_quat;
+                mat.camera_rotation = Vec4::from(new_quat.normalize());
             }
         }
     }
