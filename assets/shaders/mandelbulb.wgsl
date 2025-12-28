@@ -18,6 +18,7 @@ struct MandelbulbMaterial {
     color_scale: f32,  // Stretches the gradient
     color_offset: f32, // Shifts the colors
     rotation: vec4<f32>, // Quaternion rotation (x, y, z, w)
+    julia: vec4<f32>, // xyz are the constant, w is enabled flag
 };
 
 @group(2) @binding(0)
@@ -90,6 +91,10 @@ fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
         if (r > 2.0) { break; }
 
         // Update Trap, keeping minimum radius reached
+        var c = p;
+        if (material.julia.w > 0.5) {
+            c = material.julia.xyz;
+        }
         trap = min(trap, r);
 
         // convert to polar
@@ -112,7 +117,7 @@ fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
         );
 
         // add the constant c
-        z += p;
+        z += c;
     }
 
     // formula for distance estimation

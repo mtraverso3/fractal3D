@@ -50,6 +50,7 @@ fn setup(
         color_scale: 1.0, // Start with 1.0
         color_offset: 0.0,
         rotation: Vec4::from(Quat::IDENTITY),
+        julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
     });
 
     commands.spawn((
@@ -89,6 +90,8 @@ struct MandelbulbMaterial {
     color_offset: f32,
     #[uniform(0)]
     rotation: Vec4,
+    #[uniform(0)]
+    julia: Vec4,
 }
 
 impl Material2d for MandelbulbMaterial {
@@ -125,14 +128,15 @@ fn update_material(
         // material.rot_y = material.rot_y % 6.2831853;
 
         if settings.rotation_speed > 0.0 {
-            let delta_rotation_y = Quat::from_rotation_y(settings.rotation_speed * time.delta_secs());
-            let delta_rotation_x = Quat::from_rotation_x(settings.rotation_speed * time.delta_secs());
+            let delta_rotation_y =
+                Quat::from_rotation_y(settings.rotation_speed * time.delta_secs());
+            let delta_rotation_x =
+                Quat::from_rotation_x(settings.rotation_speed * time.delta_secs());
 
-            let new_rotation = delta_rotation_y * delta_rotation_x * Quat::from_vec4(material.rotation);
+            let new_rotation =
+                delta_rotation_y * delta_rotation_x * Quat::from_vec4(material.rotation);
             material.rotation = Vec4::from(new_rotation.normalize());
         }
-
-
 
         if settings.animate_zoom {
             material.camera_zoom =
@@ -347,6 +351,27 @@ fn ui_controls(
                 ui.heading("Lighting");
                 ui.add(egui::Slider::new(&mut mat.light_pos_x, -10.0..=10.0).text("Light X"));
                 ui.add(egui::Slider::new(&mut mat.light_pos_y, -10.0..=10.0).text("Light Y"));
+
+
+                // JULIA FOLDING CONTROLS
+                ui.separator();
+                ui.heading("Julia Folding");
+
+                // enable/disable toggle
+                let mut is_julia = mat.julia.w > 0.5;
+                if ui.checkbox(&mut is_julia, "Enable Julia Mode").changed() {
+                    mat.julia.w = if is_julia { 1.0 } else { 0.0 };
+                }
+
+                // coordinate Sliders
+                if is_julia {
+                    ui.indent("julia_controls", |ui| {
+                        ui.label("Constant K");
+                        ui.add(egui::Slider::new(&mut mat.julia.x, -2.0..=2.0).step_by(0.005).text("X"));
+                        ui.add(egui::Slider::new(&mut mat.julia.y, -2.0..=2.0).step_by(0.005).text("Y"));
+                        ui.add(egui::Slider::new(&mut mat.julia.z, -2.0..=2.0).step_by(0.005).text("Z"));
+                    });
+                }
             }
         });
 }
