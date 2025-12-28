@@ -34,10 +34,10 @@ fn setup(
             speed: 0.2,
 
             ray_steps: 100,   // How far to march (higher = less artifacts at edges)
-            mandel_iters: 50, // Fractal detail (higher = more spikes)
-            max_dist: 50.0,   // Render distance clipping
+            mandel_iters: 20, // Fractal detail (higher = more spikes)
+            max_dist: 40.0,   // Render distance clipping
             hit_threshold: 0.002, // Precision (lower = sharper but slower)
-            camera_zoom: 1.0,
+            camera_zoom: 2.5,
         })),
         Transform::default().with_scale(Vec3::splat(1280.0)),
     ));
@@ -84,5 +84,6 @@ fn update_material(
 
         // Animate the power parameter over time
         // material.power = 8.0 + (time.elapsed_secs_f64().sin() as f32);
+        material.camera_zoom = 2.75 + (time.elapsed_secs_f64().sin() as f32) * 0.25;
     }
 }

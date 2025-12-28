@@ -29,6 +29,17 @@ fn rotate_y(p: vec3<f32>, angle: f32) -> vec3<f32> {
     );
 }
 
+// rotation helper, rotates point p around X axis by angle in radians
+fn rotate_x(p: vec3<f32>, angle: f32) -> vec3<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return vec3<f32>(
+        p.x,
+        c * p.y - s * p.z,
+        s * p.y + c * p.z
+    );
+}
+
 // Mandelbulb SDF, given current point p, estimates distance to the fractal surface
 fn sd_mandelbulb(p: vec3<f32>) -> f32 {
     var z = p;
@@ -71,7 +82,8 @@ fn sd_mandelbulb(p: vec3<f32>) -> f32 {
 // calculate distance to surface at point p after applying any transformations
 fn map(p: vec3<f32>) -> f32 {
     let rotated_p = rotate_y(p, material.time * material.speed); // rotation transformation over time
-    return sd_mandelbulb(rotated_p);
+    let rotated_p2 = rotate_x(rotated_p, material.time * material.speed);
+    return sd_mandelbulb(rotated_p2);
 }
 
 // Calculate the normal at point p using "central differences"
@@ -87,11 +99,15 @@ fn calculate_normal(p: vec3<f32>) -> vec3<f32> {
 
 fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
     // Camera Setup
-    let ro = vec3<f32>(0.0, 0.0, -3.5);
-    let rd = normalize(vec3<f32>(uv, 1.5));
+    let ro = vec3<f32>(0.0, 0.0, -material.camera_zoom); // ray origin
+    let rd = normalize(vec3<f32>(uv, 1.5)); // ray direction (focal length 1.5)
 
     var t = 0.0; // distance along the ray
-    var col = vec3<f32>(0.05, 0.05, 0.08); // Background color
+
+    // background color, simple gradient with halo effect
+    let bg = exp(uv.y - 2.0) * vec3<f32>(0.2, 0.4, 0.8);
+    let halo = clamp(dot(normalize(vec3<f32>(-ro.x, -ro.y, -ro.z)), rd), 0.0, 1.0);
+    var col = bg + vec3<f32>(0.02, 0.02, 0.08) * pow(halo, 17.0);
 
     let steps = material.ray_steps;
 
