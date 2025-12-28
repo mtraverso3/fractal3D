@@ -40,17 +40,33 @@ fn rotate_x(p: vec3<f32>, angle: f32) -> vec3<f32> {
     );
 }
 
-// Mandelbulb SDF, given current point p, estimates distance to the fractal surface
-fn sd_mandelbulb(p: vec3<f32>) -> f32 {
+// Inigo Quilez's cosine palette function, makes nice smooth color gradients
+// https://iquilezles.org/articles/palettes/
+fn palette(t: f32) -> vec3<f32> {
+    let a = vec3<f32>(0.5, 0.5, 0.5);
+    let b = vec3<f32>(0.5, 0.5, 0.5);
+    let c = vec3<f32>(1.0, 1.0, 1.0);
+    let d = vec3<f32>(0.263, 0.416, 0.557); // Blue/Gold/Pinkish tint
+
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+
+// Mandelbulb SDF, given current point p, estimates distance to the fractal surface along with orbit trap value
+fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
     var z = p;
     var dr = 1.0;
     var r = 0.0;
     let power = 8.0;
 
-    // iterating z = z^8 + c
+    var trap = 1e20; // Initialize trap to a large value, will store minimum radius reached
+
     for (var i = 0u; i < material.mandel_iters; i++) {
         r = length(z);
         if (r > 2.0) { break; }
+
+        // Update Trap, keeping minimum radius reached
+        trap = min(trap, r);
 
         // convert to polar
         var theta = acos(z.z / r);
@@ -76,14 +92,20 @@ fn sd_mandelbulb(p: vec3<f32>) -> f32 {
     }
 
     // formula for distance estimation
-    return 0.5 * log(r) * r / dr;
+    let dist = 0.5 * log(r) * r / dr;
+    return vec2<f32>(dist, trap);
 }
 
-// calculate distance to surface at point p after applying any transformations
-fn map(p: vec3<f32>) -> f32 {
-    let rotated_p = rotate_y(p, material.time * material.speed); // rotation transformation over time
+// Wrapper to handle rotation and return full data
+fn map_full(p: vec3<f32>) -> vec2<f32> {
+    let rotated_p = rotate_y(p, material.time * material.speed);
     let rotated_p2 = rotate_x(rotated_p, material.time * material.speed);
     return sd_mandelbulb(rotated_p2);
+}
+
+// Wrapper that just returns distance (cheaper for normals)
+fn map(p: vec3<f32>) -> f32 {
+    return map_full(p).x;
 }
 
 // Calculate the normal at point p using "central differences"
@@ -115,18 +137,46 @@ fn render_ray(uv: vec2<f32>, time: f32) -> vec3<f32> {
     for (var i = 0u; i < steps; i++) {
         // current position along the ray
         let p = ro + rd * t;
-        let d = map(p);
+        let data = map_full(p); // .x = dist, .y = trap
+        let d = data.x;
 
         // hit condition, close enough to the surface
         if (d < material.hit_threshold) {
             let normal = calculate_normal(p);
+            let trap = data.y; // The orbit trap value
 
-            // Lighting
-            let light_dir = normalize(vec3<f32>(0.8, 0.8, -1.0));
-            let diffuse = max(dot(normal, light_dir), 0.0);
+            // base color from palette, mixed by orbit trap and number of steps taken
+            let color_variation = trap + (f32(i) / f32(steps)) * 0.5;
+            let albedo = palette(color_variation * 2);
 
-            // Coloring by mixing orange and blue based on normal
-            col = mix(vec3<f32>(0.1, 0.2, 0.4), vec3<f32>(1.0, 0.6, 0.2), diffuse);
+            // lighting Setup
+            let light_pos = vec3<f32>(2.0, 4.0, -3.0);
+            let light_dir = normalize(light_pos - p);
+            let view_dir = normalize(ro - p);
+
+            // basic diffuse lighting based on angle to light
+            let diff = max(dot(normal, light_dir), 0.0);
+
+            // specular, see https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
+            let half_vec = normalize(light_dir + view_dir);
+            let spec = pow(max(dot(normal, half_vec), 0.0), 32.0);
+
+            // rim lighting, edges perpendicular to view get a glow
+            let rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 4.0);
+
+            // fake ambient occlusion based on number of steps taken to hit surface
+            let ao = 1.0 - (f32(i) / f32(steps));
+
+            // Combine lighting components
+            let ambient = vec3<f32>(0.1) * albedo;
+            let diffuse_light = albedo * diff * vec3<f32>(1.0, 0.9, 0.8);
+            let specular_light = vec3<f32>(1.0) * spec * 0.8;
+            let rim_light = vec3<f32>(0.0, 0.5, 1.0) * rim * 0.5;
+
+            col = (ambient + diffuse_light + specular_light + rim_light) * ao;
+
+            // some fog based on distance
+            col = mix(col, vec3<f32>(0.01, 0.01, 0.02), 1.0 - exp(-0.05 * t * t));
 
             break;
         }
@@ -167,7 +217,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         total_color += render_ray(sub_uv, material.time);
     }
 
-    var avg_col = total_color / 4.0;
+    // average the samples
+    let avg_col = total_color / 4.0;
 
-    return vec4<f32>(avg_col, 1.0);
+    // Gamma correction
+    let final_col = pow(avg_col, vec3<f32>(0.5545)); // approx 1/2.2 + 0.1
+
+    return vec4<f32>(final_col, 1.0);
 }
