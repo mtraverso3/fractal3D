@@ -61,6 +61,8 @@ fn setup(
         rim_strength: 0.1,
         fog_density: 0.05,
         julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
+        supersampling_enabled: 1,
+
     });
 
     commands.spawn((
@@ -110,6 +112,8 @@ struct MandelbulbMaterial {
     fog_density: f32,
     #[uniform(0)]
     julia: Vec4,
+    #[uniform(0)]
+    supersampling_enabled: u32,
 }
 
 impl Material2d for MandelbulbMaterial {
@@ -178,6 +182,10 @@ fn keyboard_controls(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {
+    if keys.get_pressed().next().is_none() {
+        return;
+    }
+
     let speed = 2.0 * time.delta_secs();
     let rotation_speed = 1.5 * time.delta_secs();
 
@@ -488,6 +496,13 @@ fn ui_controls(
                         ui.add(egui::Slider::new(&mut mat.julia.y, -2.0..=2.0).step_by(0.005).text("Y"));
                         ui.add(egui::Slider::new(&mut mat.julia.z, -2.0..=2.0).step_by(0.005).text("Z"));
                     });
+                }
+
+                ui.separator();
+                ui.heading("Performance");
+                let mut ss_enabled = mat.supersampling_enabled > 0;
+                if ui.checkbox(&mut ss_enabled, "Supersampling (2x2)").changed() {
+                    mat.supersampling_enabled = if ss_enabled { 1 } else { 0 };
                 }
             }
         });

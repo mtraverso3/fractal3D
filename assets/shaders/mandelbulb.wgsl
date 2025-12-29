@@ -23,6 +23,7 @@ struct MandelbulbMaterial {
     rim_strength: f32, // Rim lighting strength
     fog_density: f32,  // Fog density
     julia: vec4<f32>, // xyz are the constant, w is enabled flag
+    supersampling: u32, // 0=off, 1=2x2 SSAA
 };
 
 @group(2) @binding(0)
@@ -286,39 +287,44 @@ fn render_ray(uv: vec2<f32>) -> vec3<f32> {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    // size of one pixel in UV space, currently hardcoded estimate
-    // ideally, we do let pixel_size = 1.0 / vec2<f32>(screen_width, screen_height);
-    let px = 0.0008;
-
-    // 2x2 super sampling offsets
-    let offsets = array<vec2<f32>, 4>(
-        vec2<f32>(-0.25, -0.25),
-        vec2<f32>( 0.25, -0.25),
-        vec2<f32>(-0.25,  0.25),
-        vec2<f32>( 0.25,  0.25)
-    );
-
-    var total_color = vec3<f32>(0.0);
-
     let aspect = material.resolution.x / material.resolution.y;
+    var col: vec3<f32>;
 
-    // grab colors from each sub-pixel sample
-    for (var i = 0; i < 4; i++) {
-        // calculate the specific sub-pixel UV
-        let sub_uv_raw = in.uv + (offsets[i] * px);
+    if (material.supersampling > 0u) {
+        // size of one pixel in UV space, currently hardcoded estimate
+        // ideally, we do let pixel_size = 1.0 / vec2<f32>(screen_width, screen_height);
+        let px = vec2<f32>(1.0 / material.resolution.x, 1.0 / material.resolution.y);
 
-        // remap to [-1, 1]
-        var sub_uv = (sub_uv_raw * 2.0) - 1.0;
-        sub_uv.x *= aspect;
+        // 2x2 super sampling offsets
+        let offsets = array<vec2<f32>, 4>(
+            vec2<f32>(-0.25, -0.25),
+            vec2<f32>( 0.25, -0.25),
+            vec2<f32>(-0.25,  0.25),
+            vec2<f32>( 0.25,  0.25)
+        );
 
-        total_color += render_ray(sub_uv);
+        var total_color = vec3<f32>(0.0);
+
+        // grab colors from each sub-pixel sample
+        for (var i = 0; i < 4; i++) {
+            // calculate the specific sub-pixel UV
+            let sub_uv_raw = in.uv + (offsets[i] * px);
+
+            // remap to [-1, 1]
+            var sub_uv = (sub_uv_raw * 2.0) - 1.0;
+            sub_uv.x *= aspect;
+
+            total_color += render_ray(sub_uv);
+        }
+        // average the samples
+        col = total_color / 4.0;
+    } else {
+        var uv = (in.uv * 2.0) - 1.0;
+        uv.x *= aspect;
+        col = render_ray(uv);
     }
 
-    // average the samples
-    let avg_col = total_color / 4.0;
-
     // Gamma correction
-    let final_col = pow(avg_col, vec3<f32>(0.5545)); // approx 1/2.2 + 0.1
-
+    let final_col = pow(col, vec3<f32>(0.5545)); // approx 1/2.2 + 0.1
     return vec4<f32>(final_col, 1.0);
 }
