@@ -300,13 +300,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var total_color = vec3<f32>(0.0);
 
+    let aspect = material.resolution.x / material.resolution.y;
+
     // grab colors from each sub-pixel sample
     for (var i = 0; i < 4; i++) {
         // calculate the specific sub-pixel UV
         let sub_uv_raw = in.uv + (offsets[i] * px);
 
         // remap to [-1, 1]
-        let sub_uv = (sub_uv_raw * 2.0) - 1.0;
+        var sub_uv = (sub_uv_raw * 2.0) - 1.0;
+        sub_uv.x *= aspect;
 
         total_color += render_ray(sub_uv);
     }

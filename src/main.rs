@@ -19,7 +19,13 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (update_material, mouse_controls, keyboard_controls, manage_rendering_mode),
+            (
+                update_material,
+                mouse_controls,
+                keyboard_controls,
+                manage_rendering_mode,
+                resize_mesh,
+            ),
         )
         .add_systems(EguiPrimaryContextPass, ui_controls)
         .run();
@@ -49,7 +55,7 @@ fn setup(
         light_pos_x: 8.0,
         light_pos_y: 10.0,
         background_glow_intensity: 0.0,
-        color_scale: 0.095, // Start with 1.0
+        color_scale: 0.95, // Start with 1.0
         color_offset: 0.05,
         ao_strength: 1.2,
         rim_strength: 0.1,
@@ -60,7 +66,7 @@ fn setup(
     commands.spawn((
         Mesh2d(meshes.add(Rectangle::default())),
         MeshMaterial2d(material_handle),
-        Transform::default().with_scale(Vec3::splat(1280.0)),
+        Transform::default().with_scale(Vec3::new(win.width(), win.height(), 1.0)),
     ));
 }
 
@@ -148,6 +154,16 @@ fn update_material(
             material.camera_zoom =
                 2.75 + ((time.elapsed_secs_f64() * settings.zoom_speed as f64).sin() as f32) * 0.25;
         }
+    }
+}
+
+fn resize_mesh(
+    window: Query<&Window>,
+    mut transforms: Query<&mut Transform, With<MeshMaterial2d<MandelbulbMaterial>>>,
+) {
+    let win = window.single().unwrap();
+    for mut transform in transforms.iter_mut() {
+        transform.scale = Vec3::new(win.width(), win.height(), 1.0);
     }
 }
 
