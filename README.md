@@ -20,3 +20,4 @@ A simple real-time ray-marched Mandelbulb fractal renderer using Rust and gpu fr
 
 ## Example Output
 ![Mandelbulb Render](./example/mandelbulb.png)
+![Mandelbulb Render Video](./example/mandelbulb.gif)
