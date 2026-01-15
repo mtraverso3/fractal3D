@@ -61,7 +61,7 @@ fn setup(
         rim_strength: 0.1,
         fog_density: 0.05,
         julia: Vec4::new(0.35, 0.35, -0.35, 0.0), // last value 0, not used initially
-        supersampling_enabled: 1,
+        supersampling_enabled: 0,
 
     });
 
