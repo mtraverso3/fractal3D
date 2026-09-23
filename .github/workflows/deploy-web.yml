@@ -1,0 +1,43 @@
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "web/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "wrangler.jsonc"
+      - ".github/actions/setup-web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+# Never run two deploys at once, but let a running deploy finish
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://fractal.mtraverso.net
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-web
+
+      - name: Build
+        run: bash web/build.sh
+
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
