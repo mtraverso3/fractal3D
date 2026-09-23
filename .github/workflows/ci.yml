@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint
+
+      # Bevy's native dependencies for audio, input and windowing on Linux
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy (desktop)
+        run: cargo clippy -- -D warnings
+
+      - name: Clippy (web)
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-web
+
+      # Also fails if the wasm grows past Cloudflare's 25 MiB asset limit
+      - name: Build
+        run: bash web/build.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: dist
+          retention-days: 7
