@@ -2,6 +2,7 @@ mod controls;
 mod material;
 mod ui;
 
+use bevy::asset::AssetMetaCheck;
 use bevy::prelude::*;
 use bevy::sprite_render::Material2dPlugin;
 use bevy::winit::WinitSettings;
@@ -12,7 +13,16 @@ use material::{FractalMaterial, MandelbulbMaterial};
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins,
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(primary_window()),
+                    ..default()
+                })
+                // No asset uses .meta files, so don't request them (a 404 per asset on the web)
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
+                }),
             EguiPlugin::default(),
             Material2dPlugin::<MandelbulbMaterial>::default(),
         ))
@@ -36,6 +46,18 @@ fn main() {
         )
         .add_systems(EguiPrimaryContextPass, ui::ui_controls)
         .run();
+}
+
+fn primary_window() -> Window {
+    Window {
+        title: "fractal3D".into(),
+        // On the web, render into the page's `<canvas id="bevy">` and keep it sized to its parent
+        #[cfg(target_arch = "wasm32")]
+        canvas: Some("#bevy".into()),
+        #[cfg(target_arch = "wasm32")]
+        fit_canvas_to_parent: true,
+        ..default()
+    }
 }
 
 fn setup(
