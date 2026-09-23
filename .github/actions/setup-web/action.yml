@@ -1,0 +1,34 @@
+name: Set up web toolchain
+description: Rust with the wasm target, wasm-bindgen matching Cargo.lock, and wasm-opt
+
+inputs:
+  binaryen-version:
+    description: Binaryen release providing wasm-opt
+    default: "133"
+
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: web
+
+    # wasm-bindgen-cli must match the wasm-bindgen crate version exactly
+    - name: Read wasm-bindgen version
+      id: versions
+      shell: bash
+      run: echo "wasm_bindgen=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')" >> "$GITHUB_OUTPUT"
+
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-bindgen@${{ steps.versions.outputs.wasm_bindgen }}
+
+    - name: Install wasm-opt
+      shell: bash
+      run: |
+        curl -sSL "https://github.com/WebAssembly/binaryen/releases/download/version_${{ inputs.binaryen-version }}/binaryen-version_${{ inputs.binaryen-version }}-x86_64-linux.tar.gz" | tar xz -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/binaryen-version_${{ inputs.binaryen-version }}/bin" >> "$GITHUB_PATH"
