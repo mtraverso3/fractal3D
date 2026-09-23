@@ -18,7 +18,15 @@ rm -rf "$OUT"
 wasm-bindgen --out-dir "$OUT" --out-name fractal3D --target web --no-typescript "$WASM"
 
 if command -v wasm-opt >/dev/null; then
-    wasm-opt -Oz --all-features "$OUT/fractal3D_bg.wasm" -o "$OUT/fractal3D_bg.wasm"
+    # Only the features rustc emits for wasm32-unknown-unknown. `--all-features` lets
+    # wasm-opt use proposals browsers don't ship yet (e.g. compact imports), which
+    # makes the module fail to load.
+    wasm-opt -Oz \
+        --enable-bulk-memory --enable-bulk-memory-opt \
+        --enable-reference-types --enable-call-indirect-overlong \
+        --enable-multivalue --enable-mutable-globals \
+        --enable-nontrapping-float-to-int --enable-sign-ext \
+        "$OUT/fractal3D_bg.wasm" -o "$OUT/fractal3D_bg.wasm"
 else
     echo "warning: wasm-opt not found, skipping size optimization" >&2
 fi
