@@ -31,7 +31,7 @@ else
     echo "warning: wasm-opt not found, skipping size optimization" >&2
 fi
 
-cp web/index.html "$OUT/"
+cp web/index.html web/og.jpg "$OUT/"
 cp -r assets "$OUT/"
 
 size=$(wc -c < "$OUT/fractal3D_bg.wasm")
