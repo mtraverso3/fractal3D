@@ -10,7 +10,8 @@ struct MandelbulbMaterial {
     ray_steps: u32,
     mandel_iters: u32,
     max_dist: f32,
-    hit_threshold: f32,
+    detail: f32,                    // hit threshold in pixels is 1/detail
+    step_factor: f32,               // shortens steps for formulas that overestimate distance
     camera_zoom: f32,
     camera_position: vec3<f32>,
     camera_rotation: vec4<f32>,     // quaternion (x, y, z, w)
@@ -34,6 +35,9 @@ var<uniform> material: MandelbulbMaterial;
 // `sd_mandelbulb`, so the fractal surface lies entirely inside this radius
 const BAILOUT: f32 = 2.0;
 const TAU: f32 = 6.28318;
+const FOCAL_LENGTH: f32 = 1.5;
+// Keeps the hit threshold above f32 precision right in front of the camera
+const MIN_THRESHOLD: f32 = 1e-6;
 
 // Inigo Quilez's cosine palette function, makes nice smooth color gradients
 // https://iquilezles.org/articles/palettes/
@@ -75,8 +79,9 @@ fn sd_mandelbulb(p: vec3<f32>) -> vec2<f32> {
         if (r > BAILOUT) { break; }
         trap = min(trap, r);
 
-        // convert to polar, then scale and rotate the angles
-        let theta = acos(z.z / r) * power;
+        // convert to polar, then scale and rotate the angles. atan2 rather than acos(z / r),
+        // which loses all precision near the poles where z / r rounds to 1
+        let theta = atan2(length(z.xy), z.z) * power;
         let phi = atan2(z.y, z.x) * power;
 
         // r^(power-1) is shared by the derivative and the new radius, saving a pow per iteration
@@ -150,8 +155,8 @@ fn map(p: vec3<f32>) -> f32 {
 // Surface normal using the tetrahedron technique: 4 SDF evaluations instead of the 6
 // needed for central differences, sampled at the same distance from p
 // see: https://iquilezles.org/articles/normalsSDF/
-fn calculate_normal(p: vec3<f32>) -> vec3<f32> {
-    let h = material.hit_threshold * 0.5 * 0.5773; // 1/sqrt(3), keeps the sample radius at hit_threshold/2
+fn calculate_normal(p: vec3<f32>, threshold: f32) -> vec3<f32> {
+    let h = threshold * 0.5 * 0.5773; // 1/sqrt(3), keeps the sample radius at threshold/2
     let k = vec2<f32>(1.0, -1.0);
     return normalize(
         k.xyy * map(p + k.xyy * h) +
@@ -161,8 +166,8 @@ fn calculate_normal(p: vec3<f32>) -> vec3<f32> {
     );
 }
 
-fn shade(p: vec3<f32>, ro: vec3<f32>, trap: f32, t: f32, step_frac: f32) -> vec3<f32> {
-    let normal = calculate_normal(p);
+fn shade(p: vec3<f32>, ro: vec3<f32>, trap: f32, t: f32, threshold: f32, step_frac: f32) -> vec3<f32> {
+    let normal = calculate_normal(p, threshold);
 
     // combine orbit trap and steps for more variation
     let albedo = palette((trap + step_frac) * material.color_scale + material.color_offset);
@@ -195,13 +200,40 @@ fn shade(p: vec3<f32>, ro: vec3<f32>, trap: f32, t: f32, step_frac: f32) -> vec3
     return mix(col, vec3<f32>(0.01, 0.01, 0.02), 1.0 - exp(-material.fog_density * t));
 }
 
+// Pseudo random value in [0, 1)
+fn hash(p: vec2<f32>) -> f32 {
+    let q = fract(p * vec2<f32>(0.1031, 0.1030));
+    let r = q + dot(q, q.yx + 33.33);
+    return fract((r.x + r.y) * r.x);
+}
+
+// Moves a hit onto the threshold shell, so the surface does not depend on where the last
+// step happened to land. `last_step` is the step that went from outside to inside.
+fn refine_hit(ro: vec3<f32>, rd: vec3<f32>, t_hit: f32, last_step: f32, pixel: f32) -> vec3<f32> {
+    var t = t_hit;
+    var step = last_step * 0.5;
+    var data = map_full(ro + rd * t);
+    for (var i = 0; i < 10; i++) {
+        let threshold = max(t * pixel, MIN_THRESHOLD);
+        if (data.x < threshold && data.x > threshold * 0.95) { break; }
+        t += select(-step, step, data.x > threshold);
+        step *= 0.5;
+        data = map_full(ro + rd * t);
+    }
+    return vec3<f32>(t, data.y, max(t * pixel, MIN_THRESHOLD));
+}
+
 // ro is the ray origin in world space, to_origin the unit vector from ro towards the origin
-fn render_ray(uv: vec2<f32>, ro: vec3<f32>, to_origin: vec3<f32>) -> vec3<f32> {
-    // ray direction in camera space (focal length 1.5), then rotated to world space
-    let rd = rotate_vector_inverse(normalize(vec3<f32>(uv, 1.5)), material.camera_rotation);
+fn render_ray(uv: vec2<f32>, ro: vec3<f32>, to_origin: vec3<f32>, seed: vec2<f32>) -> vec3<f32> {
+    let rd = rotate_vector_inverse(normalize(vec3<f32>(uv, FOCAL_LENGTH)), material.camera_rotation);
+
+    // A surface counts as hit once it is closer than the size of a pixel at that distance,
+    // so detail stays sharp when zooming in instead of being limited by a fixed threshold
+    let pixel = 2.0 / (material.resolution.y * FOCAL_LENGTH * material.detail);
 
     let steps = material.ray_steps;
     var t = 0.0;
+    var last_step = 0.0;
 
     for (var i = 0u; i < steps; i++) {
         let p = ro + rd * t;
@@ -210,12 +242,18 @@ fn render_ray(uv: vec2<f32>, ro: vec3<f32>, to_origin: vec3<f32>) -> vec3<f32> {
         // a ray moving away from the origin only gets further out, so it can never hit
         if (dot(p, p) > BAILOUT * BAILOUT && dot(p, rd) > 0.0) { break; }
 
-        let data = map_full(p); // .x = dist, .y = trap
-        if (data.x < material.hit_threshold) {
-            return shade(p, ro, data.y, t, f32(i) / f32(steps));
+        let dist = map(p);
+        let threshold = max(t * pixel, MIN_THRESHOLD);
+        if (dist < threshold) {
+            let hit = refine_hit(ro, rd, t, last_step, pixel); // .x = t, .y = trap, .z = threshold
+            return shade(ro + rd * hit.x, ro, hit.y, hit.x, hit.z, f32(i) / f32(steps));
         }
 
-        t += data.x;
+        // Stop half a threshold short, and vary the step slightly per pixel so the step
+        // count based shading doesn't form bands
+        let jitter = 1.0 - 0.1 * hash(seed + f32(i));
+        last_step = (dist - 0.5 * threshold) * material.step_factor * jitter;
+        t += last_step;
         if (t > material.max_dist) { break; }
     }
 
@@ -249,13 +287,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         for (var i = 0; i < 4; i++) {
             var uv = (in.uv + offsets[i]) * 2.0 - 1.0;
             uv.x *= aspect;
-            total += render_ray(uv, ro, to_origin);
+            total += render_ray(uv, ro, to_origin, in.clip_position.xy + f32(i) * 0.25);
         }
         col = total * 0.25;
     } else {
         var uv = in.uv * 2.0 - 1.0;
         uv.x *= aspect;
-        col = render_ray(uv, ro, to_origin);
+        col = render_ray(uv, ro, to_origin, in.clip_position.xy);
     }
 
     // Gamma correction
