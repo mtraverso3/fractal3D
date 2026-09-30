@@ -42,10 +42,11 @@ fn settings_panel(ui: &mut egui::Ui, mat: &mut MandelbulbMaterial, settings: &mu
     ui.label("Rendering Quality");
     ui.add(egui::Slider::new(&mut mat.ray_steps, 10..=300).text("Ray Steps"));
     ui.add(
-        egui::Slider::new(&mut mat.hit_threshold, 0.0001..=0.01)
-            .text("Threshold")
+        egui::Slider::new(&mut mat.detail, 0.1..=4.0)
+            .text("Detail")
             .logarithmic(true),
     );
+    ui.add(egui::Slider::new(&mut mat.step_factor, 0.1..=1.0).text("Step Factor"));
     ui.add(egui::Slider::new(&mut mat.max_dist, 10.0..=100.0).text("Max Dist"));
 
     ui.separator();

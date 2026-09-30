@@ -4,7 +4,11 @@ use bevy::prelude::*;
 use bevy::winit::WinitSettings;
 use bevy_egui::EguiContexts;
 
-const MOVE_SPEED: f32 = 2.0;
+/// Movement per second, as a fraction of the distance to the fractal surface
+const MOVE_SPEED: f32 = 1.5;
+/// Closest the camera gets to the surface. Any nearer and f32 precision can no longer tell
+/// neighboring pixels apart, so the image turns blocky.
+const MIN_SURFACE_DISTANCE: f32 = 1e-4;
 const TURN_SPEED: f32 = 1.5;
 const MOUSE_SENSITIVITY: f32 = 0.005;
 
@@ -183,9 +187,18 @@ pub fn keyboard_controls(
 
     fractal.edit(&mut materials, |mat| {
         if move_input != Vec3::ZERO {
+            // slow down near the surface so close-up detail can be approached
+            let distance = mat.distance(mat.eye());
+            let speed = distance.max(MIN_SURFACE_DISTANCE) * MOVE_SPEED;
             // move along the camera's own axes
-            let local_move = move_input.normalize() * MOVE_SPEED * dt;
+            let local_move = move_input.normalize() * speed * dt;
+            let position = mat.camera_position;
             mat.camera_position += mat.rotation().inverse() * local_move;
+
+            let new_distance = mat.distance(mat.eye());
+            if new_distance < MIN_SURFACE_DISTANCE && new_distance < distance {
+                mat.camera_position = position;
+            }
         }
 
         if yaw != 0.0 || pitch != 0.0 {
