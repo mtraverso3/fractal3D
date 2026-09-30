@@ -10,5 +10,5 @@
     { "pattern": "fractal.mtraverso.net", "custom_domain": true }
   ],
   "workers_dev": false,
-  "preview_urls": false
+  "preview_urls": true
 }
